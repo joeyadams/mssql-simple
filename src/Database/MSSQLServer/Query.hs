@@ -14,6 +14,7 @@ module Database.MSSQLServer.Query (
                                   -- * SQL Text Query
                                   -- $use_sql
                                     sql
+                                  , sqlWith
                                     
                                   -- ** ResultSet
                                   , ResultSet (..)
@@ -165,19 +166,18 @@ instance Exception QueryError
 
 
 sql :: ResultSet a => Connection -> T.Text -> IO a
-sql (Connection sock ps) query = do
+sql = sqlWith resultSetParser
+
+-- | Execute a SQL command, using a custom parser to parse the result set.
+sqlWith :: Parser' a -> Connection -> T.Text -> IO a
+sqlWith parser (Connection sock ps) query = do
   sendAll sock $ Put.runPut $ putClientMessage ps $ CMSqlBatch $ SqlBatch query
   TokenStreams tss <- readMessage sock $ Get.runGetIncremental getServerMessage
 
-  case parse responseParser tss of
+  case parse (runExceptT parser) tss of
     [] -> fail "sql: failed to parse token streams"
     (Left info,_):_ -> throwIO $ QueryError info
     (Right x,_):_ -> return x
-
-  where
-    responseParser :: (ResultSet a) => Parser (Either Info a)
-    responseParser = runExceptT $ resultSetParser
-
 
 
 rpc :: (RpcQuerySet a, RpcResponseSet b) => Connection -> a -> IO b

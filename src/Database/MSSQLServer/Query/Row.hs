@@ -5,6 +5,8 @@
 module Database.MSSQLServer.Query.Row ( Row (..)
                                       , RowCount (..)
                                       , ReturnStatus (..)
+                                      , RowParser
+                                      , mcdTypeInfo
                                       ) where
 
 import Database.Tds.Message
@@ -30,6 +32,8 @@ instance (Data a) => Row (Only a) where
     where
       !d1 = fromRawBytes (mcdTypeInfo m1) b1
   fromListOfRawBytes _ _ = error "fromListOfRawBytes: List length must be 1"
+
+type RowParser a = [MetaColumnData] -> [RawBytes] -> a
 
 -- [MEMO] using Template Haskell
 forM [2..30] $ \n -> do

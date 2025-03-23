@@ -4,8 +4,17 @@
 {-# LANGUAGE CPP #-}
 
 
-module Database.MSSQLServer.Query.ResultSet ( ResultSet (..)
+module Database.MSSQLServer.Query.ResultSet (
+                                            -- * Type classes
+                                              ResultSet (..)
                                             , Result (..)
+
+                                            -- * Custom parsers
+                                            , parseNoResult
+                                            , parseRowCount
+                                            , parseReturnStatus
+                                            , parseListOfRows
+                                            , parseListOfRowsWith
                                             ) where
 
 
@@ -129,10 +138,8 @@ rowCountFinalDone' = do
   TSDone (Done _ _ rc) <- trySatisfy isFinalTSDone
   return $ RowCount $ fromIntegral rc
 
-
-
-listOfRow :: Row a => Parser' ([a])
-listOfRow = do
+listOfRow :: RowParser a -> Parser' [a]
+listOfRow rowParser = do
   tsCmd <- trySatisfy isTSColMetaData
   _ <- trySatisfyMany $ not . isTSRow -- [MEMO] skip Order
   tsRows <- trySatisfyMany isTSRow
@@ -143,7 +150,7 @@ listOfRow = do
                Nothing -> error "listOfRow: ColMetaData is necessary"
                Just mcds' -> mcds'
       rows = (\(TSRow row) -> getRawBytes <$> row) <$> tsRows
-    in fromListOfRawBytes mcds <$> rows
+    in rowParser mcds <$> rows
   where
 
     isTSColMetaData :: TokenStream -> Bool
@@ -158,27 +165,47 @@ listOfRow = do
     getRawBytes (RCDOrdinal dt) = dt
     getRawBytes (RCDLarge _ _ dt) = dt
 
-listOfRowDone :: Row a => Parser' ([a])
-listOfRowDone = do
-  rs <- listOfRow
+-- | Read a result set, expecting more result sets from this batch afterward.
+listOfRowDone :: RowParser a -> Parser' ([a])
+listOfRowDone rowParser = do
+  rs <- listOfRow rowParser
   _ <- trySatisfyMany $ not . isTSDone -- [MEMO] necesarry ?
   _ <- trySatisfy $ isTSDone
   return rs
 
-listOfRowFinalDone :: Row a => Parser' ([a])
-listOfRowFinalDone = do
-  rs <- listOfRow
+-- | Read a result set from a batch that only returns one result set.
+listOfRowFinalDone :: RowParser a -> Parser' ([a])
+listOfRowFinalDone rowParser = do
+  rs <- listOfRow rowParser
   _ <- trySatisfyMany $ not . isFinalTSDone -- [MEMO] necesarry ?
   _ <- trySatisfy $ isFinalTSDone
   return rs
 
-listOfRowFinalDone' :: Row a => Parser' ([a])
-listOfRowFinalDone' = do
-  rs <- listOfRow
+-- | Read the last result set from a batch that returns multiple result sets.
+listOfRowFinalDone' :: RowParser a -> Parser' ([a])
+listOfRowFinalDone' rowParser = do
+  rs <- listOfRow rowParser
   _ <- trySatisfyMany $ not . isTSDone -- [MEMO] necesarry ?
   _ <- trySatisfy $ isFinalTSDone
   return rs
 
+
+parseNoResult :: Parser' ()
+parseNoResult = noResultFinalDone
+
+parseRowCount :: Parser' RowCount
+parseRowCount = rowCountFinalDone
+
+parseReturnStatus :: Parser' ReturnStatus
+parseReturnStatus = returnStatusFinalDone
+
+-- TODO: Try using listOfRowDone here to support multiple queries in a batch via monadic composition.
+parseListOfRows :: (Row a) => Parser' [a]
+parseListOfRows = listOfRowFinalDone fromListOfRawBytes
+
+-- TODO: Try using listOfRowDone here to support multiple queries in a batch via monadic composition.
+parseListOfRowsWith :: RowParser a -> Parser' [a]
+parseListOfRowsWith = listOfRowFinalDone
 
 
 class ResultSet a where
@@ -194,8 +221,9 @@ instance ResultSet RowCount where
 instance ResultSet ReturnStatus where
   resultSetParser = returnStatusFinalDone
 
+-- TODO: parameterized version
 instance (Row a) => ResultSet [a] where
-  resultSetParser = listOfRowFinalDone
+  resultSetParser = parseListOfRows
 
 
 
@@ -228,7 +256,7 @@ instance Result ReturnStatus where
   resultParser _ = returnStatusDone
 
 instance Row a => Result [a] where
-  resultParser True = listOfRowFinalDone'
-  resultParser _ = listOfRowDone
+  resultParser True = listOfRowFinalDone' fromListOfRawBytes
+  resultParser _ = listOfRowDone fromListOfRawBytes
 
 
