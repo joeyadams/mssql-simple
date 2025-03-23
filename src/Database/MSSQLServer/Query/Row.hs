@@ -6,7 +6,6 @@ module Database.MSSQLServer.Query.Row ( Row (..)
                                       , RowCount (..)
                                       , ReturnStatus (..)
                                       , RowParser
-                                      , mcdTypeInfo
                                       ) where
 
 import Database.Tds.Message
@@ -19,9 +18,6 @@ import Language.Haskell.TH (runIO,pprint)
 
 newtype RowCount = RowCount Int
 newtype ReturnStatus = ReturnStatus Int
-
-mcdTypeInfo :: MetaColumnData -> TypeInfo
-mcdTypeInfo (MetaColumnData _ _ ti _ _) = ti
 
 
 class Row a where

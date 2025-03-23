@@ -286,9 +286,6 @@ readMessage sock decoder = do
 -- >       !d6 = fromRawBytes (mcdTypeInfo m6) b6
 -- >       !d7 = fromRawBytes (mcdTypeInfo m7) b7
 -- >
--- >       mcdTypeInfo :: MetaColumnData -> TypeInfo
--- >       mcdTypeInfo (MetaColumnData _ _ ti _ _) = ti
--- >
 -- >   fromListOfRawBytes _ _ = error "fromListOfRawBytes: List length must be 7"
 -- >
 -- > sql_select5 :: Connection -> IO [Some]
